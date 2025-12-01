@@ -111,7 +111,6 @@
       const newAction = action.value;
       const now = new Date().toLocaleString();
 
-      // Record exactly what the user entered for this action
       records.push({item:itemName.value, qty:newQty, action:newAction, person:newPerson, purpose:newPurpose, time:now});
 
       saveRecords();
@@ -120,14 +119,20 @@
     });
 
     search.addEventListener('input', function() {
-      const q = search.value.toLowerCase();
+      const q = search.value.toLowerCase().trim();
+
+      if (q === '') {
+        recordsContainer.style.display = 'none';
+        recordsTable.innerHTML = '';
+        return;
+      }
+
       const filtered = records.filter(r => r.item.toLowerCase().includes(q));
 
       recordsTable.innerHTML = '';
       if (filtered.length > 0) {
         recordsContainer.style.display = 'block';
         filtered.forEach(r => {
-          // Display quantity exactly as entered by the user
           recordsTable.innerHTML += `<tr><td>${r.qty}</td><td>${r.action}</td><td>${r.person}</td><td>${r.purpose}</td><td>${r.time}</td></tr>`;
         });
       } else {
