@@ -16,6 +16,7 @@
     table { width: 100%; border-collapse: collapse; margin-top: 20px; }
     th, td { padding: 12px; border: 1px solid #333; text-align: left; }
     th { background: #222; }
+    #recordsContainer { display: none; }
     @media (max-width: 600px) { form { grid-template-columns: 1fr; } button { grid-column: span 1; } table, th, td { font-size: 14px; } }
   </style>
 </head>
@@ -36,25 +37,24 @@
       <button type="submit">Submit</button>
     </form>
 
-    <h2>Search Records</h2>
-    <input type="text" id="search" placeholder="Search item, person, purpose..." style="width:100%;margin-bottom:10px;background:#222;color:white;padding:10px;border-radius:5px;" />
+    <h2>Search Item Records</h2>
+    <input type="text" id="search" placeholder="Enter item name to see all entries" style="width:100%;margin-bottom:10px;background:#222;color:white;padding:10px;border-radius:5px;" />
 
-    <h2>Stock Records</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Item</th>
-          <th>Qty</th>
-          <th>Action</th>
-          <th>Person</th>
-          <th>Purpose</th>
-          <th>Time</th>
-          <th>Edit</th>
-          <th>Delete</th>
-        </tr>
-      </thead>
-      <tbody id="records"></tbody>
-    </table>
+    <div id="recordsContainer">
+      <h2>Stock Records for Item</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Qty</th>
+            <th>Action</th>
+            <th>Person</th>
+            <th>Purpose</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody id="records"></tbody>
+      </table>
+    </div>
 
     <h2>Current Stock Balance</h2>
     <table>
@@ -71,30 +71,28 @@
   <script>
     const form = document.getElementById('stockForm');
     const recordsTable = document.getElementById('records');
+    const recordsContainer = document.getElementById('recordsContainer');
     const balanceTable = document.getElementById('balance');
     const search = document.getElementById('search');
 
     let records = JSON.parse(localStorage.getItem('records')) || [];
 
+    if (records.length === 0) {
+      const initialItems = ['sisal strings','Mocha Leather','Tan Leather','700ml bottles','1litre plastic bottle'];
+      const now = new Date().toLocaleString();
+      initialItems.forEach(item => {
+        records.push({item:item, qty:0, action:'add', person:'System', purpose:'Initial Load', time:now});
+      });
+      localStorage.setItem('records', JSON.stringify(records));
+    }
+
     function saveRecords() { localStorage.setItem('records', JSON.stringify(records)); }
 
     function refreshTables() {
-      recordsTable.innerHTML = '';
       balanceTable.innerHTML = '';
       let balance = {};
 
-      records.forEach((r, i) => {
-        recordsTable.innerHTML += `<tr>
-          <td>${r.item}</td>
-          <td>${r.qty}</td>
-          <td>${r.action}</td>
-          <td>${r.person}</td>
-          <td>${r.purpose}</td>
-          <td>${r.time}</td>
-          <td><button onclick="editRecord(${i})">Edit</button></td>
-          <td><button onclick="deleteRecord(${i})">Delete</button></td>
-        </tr>`;
-
+      records.forEach(r => {
         if (!balance[r.item]) balance[r.item] = 0;
         balance[r.item] += r.action === 'add' ? Number(r.qty) : -Number(r.qty);
       });
@@ -106,53 +104,43 @@
 
     form.addEventListener('submit', function(e) {
       e.preventDefault();
-      const newRecord = {
-        item: itemName.value,
-        qty: quantity.value,
-        person: person.value,
-        purpose: purpose.value,
-        action: action.value,
-        time: new Date().toLocaleString()
-      };
-      records.push(newRecord);
+      const newItemInput = itemName.value.toLowerCase();
+      const newQty = Number(quantity.value);
+      const newPerson = person.value;
+      const newPurpose = purpose.value;
+      const newAction = action.value;
+      const now = new Date().toLocaleString();
+
+      records.push({item:itemName.value, qty:newQty, action:newAction, person:newPerson, purpose:newPurpose, time:now});
+
       saveRecords();
       refreshTables();
       form.reset();
     });
 
-    function deleteRecord(i) {
-      records.splice(i, 1);
-      saveRecords();
-      refreshTables();
-    }
-
-    function editRecord(i) {
-      let r = records[i];
-      itemName.value = r.item;
-      quantity.value = r.qty;
-      person.value = r.person;
-      purpose.value = r.purpose;
-      action.value = r.action;
-      deleteRecord(i);
-    }
-
     search.addEventListener('input', function() {
-      const q = search.value.toLowerCase();
-      const rows = recordsTable.getElementsByTagName('tr');
-      for (let r of rows) {
-        const text = r.innerText.toLowerCase();
-        r.style.display = text.includes(q) ? '' : 'none';
+      const q = search.value.toLowerCase().trim();
+
+      if (q === '') {
+        recordsContainer.style.display = 'none';
+        recordsTable.innerHTML = '';
+        return;
+      }
+
+      const filtered = records.filter(r => r.item.toLowerCase().includes(q));
+
+      recordsTable.innerHTML = '';
+      if (filtered.length > 0) {
+        recordsContainer.style.display = 'block';
+        filtered.forEach(r => {
+          recordsTable.innerHTML += `<tr><td>${r.qty}</td><td>${r.action}</td><td>${r.person}</td><td>${r.purpose}</td><td>${r.time}</td></tr>`;
+        });
+      } else {
+        recordsContainer.style.display = 'none';
       }
     });
 
-    function exportExcel() {
-      const csv = records.map(r => `${r.item},${r.qty},${r.action},${r.person},${r.purpose},${r.time}`).join('\n');
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'stock_records.csv'; a.click();
-    }
-
+    function exportExcel() { const csv = records.map(r => `${r.item},${r.qty},${r.action},${r.person},${r.purpose},${r.time}`).join('\n'); const blob = new Blob([csv], { type: 'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'stock_records.csv'; a.click(); }
     function exportPDF() { alert("PDF export will be added later."); }
 
     refreshTables();
