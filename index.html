@@ -7,16 +7,15 @@
   <style>
     body { font-family: Arial, sans-serif; background: #000; color: #fff; margin: 0; padding: 0; }
     header { background: #111; padding: 20px; text-align: center; font-size: 28px; font-weight: bold; border-bottom: 2px solid #444; }
-    .container { max-width: 100%; margin: 20px auto; background: #111; padding: 20px; border-radius: 10px; border: 1px solid #333; overflow-x: auto; }
+    .container { max-width: 900px; margin: 40px auto; background: #111; padding: 20px; border-radius: 10px; border: 1px solid #333; }
     h2 { border-left: 4px solid white; padding-left: 10px; }
     form { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-    input, select, button { padding: 10px; border-radius: 5px; border: none; width: 100%; box-sizing: border-box; }
+    input, select, button { padding: 10px; border-radius: 5px; border: none; width: 100%; }
     input, select { background: #222; color: #fff; }
     button { background: #fff; color: #000; font-weight: bold; cursor: pointer; grid-column: span 2; }
     table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-    th, td { padding: 12px; border: 1px solid #333; text-align: left; word-break: break-word; }
+    th, td { padding: 12px; border: 1px solid #333; text-align: left; }
     th { background: #222; }
-    #recordsContainer { display: none; }
     @media (max-width: 600px) { form { grid-template-columns: 1fr; } button { grid-column: span 1; } table, th, td { font-size: 14px; } }
   </style>
 </head>
@@ -37,131 +36,126 @@
       <button type="submit">Submit</button>
     </form>
 
-    <h2>Search / Edit Item Records</h2>
-    <input type="text" id="search" placeholder="Enter item name to see all entries" style="width:100%;margin-bottom:10px;background:#222;color:white;padding:10px;border-radius:5px;" />
+    <h2>Search Records</h2>
+    <input type="text" id="search" placeholder="Search item, person, purpose..." style="width:100%;margin-bottom:10px;background:#222;color:white;padding:10px;border-radius:5px;" />
 
-    <div id="recordsContainer">
-      <h2>Stock Records for Item</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Qty</th><th>Action</th><th>Person</th><th>Purpose</th><th>Time</th><th>Edit</th>
-          </tr>
-        </thead>
-        <tbody id="records"></tbody>
-      </table>
-    </div>
+    <h2>Stock Records</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Qty</th>
+          <th>Action</th>
+          <th>Person</th>
+          <th>Purpose</th>
+          <th>Time</th>
+          <th>Edit</th>
+          <th>Delete</th>
+        </tr>
+      </thead>
+      <tbody id="records"></tbody>
+    </table>
 
     <h2>Current Stock Balance</h2>
     <table>
-      <thead><tr><th>Item</th><th>Balance</th><th>Edit Last Entry</th></tr></thead>
+      <thead>
+        <tr><th>Item</th><th>Balance</th></tr>
+      </thead>
       <tbody id="balance"></tbody>
     </table>
+
+    <button onclick="exportExcel()">Export Excel</button>
+    <button onclick="exportPDF()">Export PDF</button>
   </div>
 
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/10.0.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.0.0/firebase-database-compat.js"></script>
   <script>
-    const firebaseConfig = {
-      apiKey: "YOUR-API-KEY",
-      authDomain: "YOUR-PROJECT.firebaseapp.com",
-      databaseURL: "https://YOUR-PROJECT.firebaseio.com",
-      projectId: "YOUR-PROJECT",
-      storageBucket: "YOUR-PROJECT.appspot.com",
-      messagingSenderId: "…",
-      appId: "…"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-
     const form = document.getElementById('stockForm');
     const recordsTable = document.getElementById('records');
-    const recordsContainer = document.getElementById('recordsContainer');
     const balanceTable = document.getElementById('balance');
     const search = document.getElementById('search');
 
-    // Listen for changes in Firebase
-    db.ref('stockRecords').on('value', snapshot => {
-      const data = snapshot.val() || {};
-      updateBalance(data);
-      if(search.value) renderSearch(data, search.value);
-      else recordsContainer.style.display = 'none';
-    });
+    let records = JSON.parse(localStorage.getItem('records')) || [];
 
-    function updateBalance(recordsObj) {
-      const balance = {};
-      Object.values(recordsObj).forEach(r => {
-        const key = r.item.toLowerCase();
-        if(!balance[key]) balance[key] = 0;
-        balance[key] += r.action === 'add' ? Number(r.qty) : -Number(r.qty);
-      });
-      balanceTable.innerHTML = '';
-      Object.keys(balance).forEach(item => {
-        const lastRecord = Object.values(recordsObj).filter(r=>r.item.toLowerCase()===item).pop();
-        balanceTable.innerHTML += `<tr>
-          <td>${lastRecord.item}</td>
-          <td>${balance[item]}</td>
-          <td><button onclick="editRecord('${lastRecord._id}')">Edit</button></td>
-        </tr>`;
-      });
-    }
+    function saveRecords() { localStorage.setItem('records', JSON.stringify(records)); }
 
-    function renderSearch(recordsObj, query) {
+    function refreshTables() {
       recordsTable.innerHTML = '';
-      let any = false;
-      Object.values(recordsObj).forEach((r) => {
-        if (r.item.toLowerCase().includes(query.toLowerCase())) {
-          any = true;
-          recordsTable.innerHTML += `<tr>
-            <td>${r.qty}</td><td>${r.action}</td><td>${r.person}</td><td>${r.purpose}</td><td>${r.time}</td>
-            <td><button onclick="editRecord('${r._id}')">Edit</button></td>
-          </tr>`;
-        }
+      balanceTable.innerHTML = '';
+      let balance = {};
+
+      records.forEach((r, i) => {
+        recordsTable.innerHTML += `<tr>
+          <td>${r.item}</td>
+          <td>${r.qty}</td>
+          <td>${r.action}</td>
+          <td>${r.person}</td>
+          <td>${r.purpose}</td>
+          <td>${r.time}</td>
+          <td><button onclick="editRecord(${i})">Edit</button></td>
+          <td><button onclick="deleteRecord(${i})">Delete</button></td>
+        </tr>`;
+
+        if (!balance[r.item]) balance[r.item] = 0;
+        balance[r.item] += r.action === 'add' ? Number(r.qty) : -Number(r.qty);
       });
-      recordsContainer.style.display = any ? 'block' : 'none';
+
+      Object.keys(balance).forEach(item => {
+        balanceTable.innerHTML += `<tr><td>${item}</td><td>${balance[item]}</td></tr>`;
+      });
     }
 
-    form.addEventListener('submit', e => {
+    form.addEventListener('submit', function(e) {
       e.preventDefault();
       const newRecord = {
         item: itemName.value,
         qty: quantity.value,
-        action: action.value,
         person: person.value,
         purpose: purpose.value,
+        action: action.value,
         time: new Date().toLocaleString()
       };
-      const newRef = db.ref('stockRecords').push();
-      newRecord._id = newRef.key;
-      newRef.set(newRecord);
+      records.push(newRecord);
+      saveRecords();
+      refreshTables();
       form.reset();
     });
 
-    function editRecord(id) {
-      const recRef = db.ref('stockRecords/' + id);
-      recRef.once('value').then(snap => {
-        const r = snap.val();
-        const newQty = prompt('Qty', r.qty);
-        const newPerson = prompt('Person', r.person);
-        const newPurpose = prompt('Purpose', r.purpose);
-        const newAction = prompt('Action (add/remove)', r.action);
-        if(newQty!==null) r.qty = Number(newQty);
-        if(newPerson!==null) r.person = newPerson;
-        if(newPurpose!==null) r.purpose = newPurpose;
-        if(newAction==='add'||newAction==='remove') r.action = newAction;
-        r.time = new Date().toLocaleString();
-        recRef.set(r);
-      });
+    function deleteRecord(i) {
+      records.splice(i, 1);
+      saveRecords();
+      refreshTables();
     }
 
-    search.addEventListener('input', () => {
-      const q = search.value.trim();
-      if(!q) { recordsContainer.style.display='none'; recordsTable.innerHTML=''; return; }
-      db.ref('stockRecords').once('value').then(snapshot => {
-        renderSearch(snapshot.val() || {}, q);
-      });
+    function editRecord(i) {
+      let r = records[i];
+      itemName.value = r.item;
+      quantity.value = r.qty;
+      person.value = r.person;
+      purpose.value = r.purpose;
+      action.value = r.action;
+      deleteRecord(i);
+    }
+
+    search.addEventListener('input', function() {
+      const q = search.value.toLowerCase();
+      const rows = recordsTable.getElementsByTagName('tr');
+      for (let r of rows) {
+        const text = r.innerText.toLowerCase();
+        r.style.display = text.includes(q) ? '' : 'none';
+      }
     });
+
+    function exportExcel() {
+      const csv = records.map(r => `${r.item},${r.qty},${r.action},${r.person},${r.purpose},${r.time}`).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'stock_records.csv'; a.click();
+    }
+
+    function exportPDF() { alert("PDF export will be added later."); }
+
+    refreshTables();
   </script>
 </body>
 </html>
